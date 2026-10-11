@@ -348,6 +348,10 @@ class Lunara_Dispatch_Post_Builder {
 			$slug     = sanitize_title( $title );
 			$featured = isset( $section_image_map[ $slug ] ) ? (int) $section_image_map[ $slug ] : 0;
 			$payload = Lunara_Dispatch_Journal_Ingest_Bridge::build_payload( $title, $body, $run_context, (int) $section_index );
+			if ( is_wp_error( $payload ) ) {
+				$this->last_insertion_failures[] = array( 'title' => $title, 'reason' => $payload->get_error_message() );
+				continue;
+			}
 			$payload['featured_media'] = $featured;
 			if ( $source_packet_mode ) {
 				$payload['acf']['journal_dispatch_conversion_notes'] = 'OpenAI was unavailable. Dispatch preserved a deterministic source packet, provenance, and image candidate for ChatGPT or human review; this is not publishable copy.';
