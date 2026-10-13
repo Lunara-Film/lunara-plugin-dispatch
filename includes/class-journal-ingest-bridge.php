@@ -9,7 +9,15 @@ if ( ! defined( 'ABSPATH' ) ) {
 final class Lunara_Dispatch_Journal_Ingest_Bridge {
     public static function build_payload( $title, $body, array $run_context = array(), $section_index = 0 ) {
         $title = trim( wp_strip_all_tags( (string) $title ) );
-        $body = wp_kses_post( (string) $body );
+        // Foundation owns both the ingestion schema and the only draft writer.
+        // Keep the old Foundation path compatible during a plugin-first rollout;
+        // its normal ingestion boundary still performs WordPress sanitization.
+        $body = class_exists( 'Lunara_Journal_Ingest_HTML' )
+            ? Lunara_Journal_Ingest_HTML::sanitize( (string) $body )
+            : wp_kses_post( (string) $body );
+        if ( is_wp_error( $body ) ) {
+            return $body;
+        }
         $excerpt = self::plain_excerpt( $body, 260 );
         $seo = self::plain_excerpt( $body, 155 );
         $items = ! empty( $run_context['items'] ) && is_array( $run_context['items'] ) ? $run_context['items'] : array();

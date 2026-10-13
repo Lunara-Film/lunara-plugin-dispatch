@@ -67,6 +67,21 @@ function wp_kses_post( $value ) {
     return (string) $value;
 }
 
+// Foundation sanitizer is a service boundary here; its real HTML behavior is
+// covered in Foundation. This spy proves Dispatch delegates and stops on error.
+class Lunara_Journal_Ingest_HTML {
+    public static $calls = 0;
+    public static $error = null;
+    public static function sanitize( $html ) {
+        self::$calls++;
+        return self::$error ?: (string) $html;
+    }
+}
+function post_type_exists( $type ) { return 'journal' === $type; }
+function get_current_user_id() { return 1; }
+function get_posts( $args ) { return array(); }
+function sanitize_title( $value ) { return strtolower( str_replace( ' ', '-', $value ) ); }
+
 function current_time( $type, $gmt = false ) {
     unset( $gmt );
     return 'mysql' === $type ? '2026-07-12 12:00:00' : 0;
@@ -235,6 +250,7 @@ function dispatch_runtime_assert( $condition, $message, &$failures ) {
 require_once $root . DIRECTORY_SEPARATOR . 'includes/class-control-plane-client.php';
 require_once $root . DIRECTORY_SEPARATOR . 'includes/class-journal-ingest-bridge.php';
 require_once $root . DIRECTORY_SEPARATOR . 'includes/class-post-builder.php';
+require_once $root . DIRECTORY_SEPARATOR . 'includes/class-source-packet-builder.php';
 require_once $root . DIRECTORY_SEPARATOR . 'includes/class-image-handler.php';
 require_once $root . DIRECTORY_SEPARATOR . 'includes/class-feed-fetcher.php';
 
@@ -424,6 +440,22 @@ $source_origin = '';
 $source_image = $feed_fetcher->resolve_source_story_image( 'https://example.com/source-story', $source_origin );
 dispatch_runtime_assert( 'https://cdn.example.com/source-lead.jpg' === $source_image, 'source-story Open Graph image was not normalized correctly', $failures );
 dispatch_runtime_assert( 'article_open_graph' === $source_origin, 'source-story Open Graph origin was not retained', $failures );
+
+dispatch_runtime_assert( Lunara_Journal_Ingest_HTML::$calls > 0, 'Dispatch bypassed the canonical Foundation sanitizer', $failures );
+dispatch_runtime_assert( 'unchecked' === $payload['acf']['journal_validation_status'], 'HTML normalization incorrectly marked editorial validation complete', $failures );
+dispatch_runtime_assert( ! isset( $payload['meta_input']['dispatch_verified_at'] ) && ! isset( $payload['meta_input']['dispatch_ai_model'] ), 'Dispatch invented verification/model metadata', $failures );
+Lunara_Journal_Ingest_HTML::$error = new WP_Error( 'lunara_ingest_executable_html', 'Unsafe source HTML.' );
+$rejected_payload = Lunara_Dispatch_Journal_Ingest_Bridge::build_payload( 'Source story', '<script>bad</script>', $context );
+dispatch_runtime_assert( is_wp_error( $rejected_payload ) && 'lunara_ingest_executable_html' === $rejected_payload->get_error_code(), 'Bridge swallowed the sanitizer rejection', $failures );
+$before_rejected_write = count( $dispatch_filter_calls );
+$rejecting_builder = new Lunara_Dispatch_Post_Builder();
+$rejected = $rejecting_builder->split_into_individual_posts(
+    '<h2>Source story</h2>' . Lunara_Dispatch_Source_Packet_Builder::MARKER . '<p>Reporting lead.</p><p>Reporting context.</p><p>Original report: <a href="https://example.com/story">Source</a></p>',
+    array(), 'journal', 'draft', array_merge( $context, array( 'source_packet_mode' => true ) )
+);
+dispatch_runtime_assert( array() === $rejected && 1 === count( $rejecting_builder->get_last_insertion_failures() ), 'Post Builder did not surface the rejected input as an insertion failure', $failures );
+dispatch_runtime_assert( $before_rejected_write === count( $dispatch_filter_calls ), 'Rejected content reached the Foundation write filter', $failures );
+Lunara_Journal_Ingest_HTML::$error = null;
 
 if ( $failures ) {
     fwrite( STDERR, "Dispatch integration runtime failed:\n- " . implode( "\n- ", $failures ) . "\n" );
