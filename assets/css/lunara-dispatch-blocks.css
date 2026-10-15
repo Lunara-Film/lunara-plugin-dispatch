@@ -71,6 +71,7 @@
     margin: 0;
     font-size: 1.35rem;
     line-height: 1.18;
+    overflow-wrap: anywhere;
 }
 
 .lunara-journal-card__title a {
