@@ -1,0 +1,7 @@
+{
+  "name": "lunara-dispatch-ci",
+  "private": true,
+  "scripts": { "test:geometry": "node tests/public-geometry-policy-browser.js" },
+  "engines": { "node": ">=20" },
+  "devDependencies": { "playwright-core": "1.62.1" }
+}
