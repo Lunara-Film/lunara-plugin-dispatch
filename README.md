@@ -1,4 +1,4 @@
-# Lunara Dispatch Automation
+# Lunara Film Dispatch Automation
 
 Private WordPress plugin source for the Lunara Film Dispatch automation system.
 

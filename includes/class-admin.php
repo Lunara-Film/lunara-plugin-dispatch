@@ -30,8 +30,8 @@ class Lunara_Dispatch_Admin {
 
     public function add_admin_menu() {
         add_options_page(
-            'Lunara Dispatch Settings',
-            'Lunara Dispatch',
+            'Lunara Film Dispatch Settings',
+            'Lunara Film Dispatch',
             'manage_options',
             'lunara-dispatch-settings',
             array($this, 'settings_page')
@@ -212,7 +212,7 @@ class Lunara_Dispatch_Admin {
         Lunara_Dispatch_Sources::save_all($clean);
 
         add_action('admin_notices', function () {
-            echo '<div class="notice notice-success is-dismissible"><p>Lunara Dispatch sources saved.</p></div>';
+            echo '<div class="notice notice-success is-dismissible"><p>Lunara Film Dispatch sources saved.</p></div>';
         });
     }
 
@@ -299,8 +299,8 @@ class Lunara_Dispatch_Admin {
         );
         ?>
         <div style="background-color: #0a1520; color: #ffffff; padding: 20px; font-family: Georgia, serif; line-height: 1.7;">
-            <h1 style="color: #c9a961; font-family: 'Trebuchet MS', sans-serif; text-transform: uppercase;">Lunara Dispatch Automation</h1>
-            <p style="color:#cccccc;">Multi-source film-news aggregation, written in the Lunara Journal voice. Each Journal story becomes its own <?php echo esc_html($status_label); ?> post with that exact source story's lead image set as featured when the page exposes one.</p>
+            <h1 style="color: #c9a961; font-family: 'Trebuchet MS', sans-serif; text-transform: uppercase;">Lunara Film Dispatch Automation</h1>
+            <p style="color:#cccccc;">Multi-source film-news aggregation, written in the Lunara Film Journal voice. Each Journal story becomes its own <?php echo esc_html($status_label); ?> post with that exact source story's lead image set as featured when the page exposes one.</p>
             <?php if ($foundation_ready) : ?>
                 <div style="margin:16px 0 22px; padding:14px 18px; border:1px solid rgba(201,169,97,.35); background:rgba(201,169,97,.08); color:#ffffff;">
                     <strong>Managed by Journal Control Plane.</strong> Workflow settings have one authoritative home. Dispatch keeps provider keys, diagnostics, manual runs, and the visual queue here. <a style="color:#c9a961;" href="<?php echo esc_url(admin_url('edit.php?post_type=journal&page=lunara-journal-control-plane')); ?>">Open Journal Control Plane</a>.
@@ -384,7 +384,7 @@ class Lunara_Dispatch_Admin {
                 </table>
 
                 <h2 style="color:#c9a961; font-family:'Trebuchet MS',sans-serif; text-transform:uppercase; border-bottom:1px solid #c9a961; padding-bottom:6px; margin-top:30px;">Voice / Prompt Refinement</h2>
-                <p style="color:#cccccc;">Use this as Dalton's current editorial direction for the next Dispatch runs. It is added after the permanent Lunara prompt, so it can steer tone, taste, selection, and anti-patterns without editing plugin code.</p>
+                <p style="color:#cccccc;">Use this as Dalton's current editorial direction for the next Dispatch runs. It is added after the permanent Lunara Film prompt, so it can steer tone, taste, selection, and anti-patterns without editing plugin code.</p>
                 <textarea name="lunara_dispatch_voice_refinement" rows="10" style="<?php echo esc_attr($this->input_style()); ?> min-height:220px; font-family:Consolas, Monaco, monospace;" placeholder="Example: The current Journal voice is too flat and summary-like. Push harder toward reader pull, sharper openings, more specific film taste, and less generic trade recap language."><?php echo esc_textarea(get_option('lunara_dispatch_voice_refinement', '')); ?></textarea>
                 <p style="color:#cccccc;font-size:13px;margin:8px 0 0;">Tip: write this like a standing note to the writer. Be blunt. Name what sounded wrong and what the next run should do instead.</p>
 
@@ -395,12 +395,12 @@ class Lunara_Dispatch_Admin {
                 <p style="color:#cccccc;font-size:13px;margin:8px 0 18px;">Use this box to read or copy the live prompt. It is read-only so a stray selection cannot rewrite the automation.</p>
 
                 <h3 style="color:#c9a961; font-family:'Trebuchet MS',sans-serif; text-transform:uppercase; margin:18px 0 8px;">Full Prompt Override</h3>
-                <p style="color:#cccccc;">Optional. Leave this blank to use the permanent Lunara prompt above. Add text here only when you want to replace the base prompt itself; the Voice / Prompt Refinement note will still be appended after it.</p>
-                <textarea name="lunara_dispatch_system_prompt_override" rows="14" style="<?php echo esc_attr($this->input_style()); ?> min-height:300px; font-family:Consolas, Monaco, monospace;" placeholder="Blank = use the permanent Lunara Dispatch system prompt. Fill this only when you want to replace the base prompt directly."><?php echo esc_textarea($prompt_override); ?></textarea>
+                <p style="color:#cccccc;">Optional. Leave this blank to use the permanent Lunara Film prompt above. Add text here only when you want to replace the base prompt itself; the Voice / Prompt Refinement note will still be appended after it.</p>
+                <textarea name="lunara_dispatch_system_prompt_override" rows="14" style="<?php echo esc_attr($this->input_style()); ?> min-height:300px; font-family:Consolas, Monaco, monospace;" placeholder="Blank = use the permanent Lunara Film Dispatch system prompt. Fill this only when you want to replace the base prompt directly."><?php echo esc_textarea($prompt_override); ?></textarea>
                 <p style="color:#cccccc;font-size:13px;margin:8px 0 0;">Recommended workflow: copy the assembled prompt above, revise it here, save, run Dispatch in draft mode, then grade the output before trusting it.</p>
 
                 <h2 style="color:#c9a961; font-family:'Trebuchet MS',sans-serif; text-transform:uppercase; border-bottom:1px solid #c9a961; padding-bottom:6px; margin-top:30px;">AI Provider</h2>
-                <p style="color:#cccccc;">Pick which AI writes the Journal. The same Lunara editorial system prompt is sent to every provider, so the voice stays identical — only the brain changes. Paste any keys you have; only the active provider's key is required.</p>
+                <p style="color:#cccccc;">Pick which AI writes the Journal. The same Lunara Film editorial system prompt is sent to every provider, so the voice stays identical — only the brain changes. Paste any keys you have; only the active provider's key is required.</p>
                 <table style="width:100%;">
                     <?php
                     $opts = '';
