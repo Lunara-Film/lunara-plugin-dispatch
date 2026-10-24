@@ -285,7 +285,7 @@ class Lunara_Dispatch_Post_Builder {
 		$this->last_quality_gate_skips     = array();
 		$this->last_insertion_failures     = array();
 		if ( ! post_type_exists( $post_type ) ) {
-			error_log( 'Lunara Dispatch: Journal post type is unavailable; refusing to create fallback posts.' );
+			error_log( 'Lunara Film Dispatch: Journal post type is unavailable; refusing to create fallback posts.' );
 			return $created;
 		}
 		$sections                          = $this->extract_sections_with_body( $html );
@@ -312,7 +312,7 @@ class Lunara_Dispatch_Post_Builder {
 
 				error_log(
 					sprintf(
-						'Lunara Dispatch: quality gate skipped "%s" (%s).',
+						'Lunara Film Dispatch: quality gate skipped "%s" (%s).',
 						'' !== $title ? $title : '(untitled section)',
 						$quality_failure
 					)
@@ -336,7 +336,7 @@ class Lunara_Dispatch_Post_Builder {
 
 				error_log(
 					sprintf(
-						'Lunara Dispatch: skipped topic duplicate "%s" near "%s" (score %.2f).',
+						'Lunara Film Dispatch: skipped topic duplicate "%s" near "%s" (score %.2f).',
 						$title,
 						$match['title'],
 						$match['score']
@@ -365,7 +365,7 @@ class Lunara_Dispatch_Post_Builder {
 					'reason' => is_wp_error( $new_id ) ? $new_id->get_error_message() : 'unknown insert failure',
 				);
 				error_log(
-					'Lunara Dispatch: failed to create post "' . $title . '": ' .
+					'Lunara Film Dispatch: failed to create post "' . $title . '": ' .
 					( is_wp_error( $new_id ) ? $new_id->get_error_message() : 'unknown error' )
 				);
 				continue;
@@ -580,7 +580,7 @@ class Lunara_Dispatch_Post_Builder {
 		// variables) so && short-circuits and skips the second, pricier
 		// keyword scan once the first signal already passed.
 		if ( ! $this->has_originality_signal( $title . ' ' . $text ) && ! $this->has_reader_pull_signal( $title . ' ' . $text ) ) {
-			return 'no distinct Lunara angle or reader-pull signal';
+			return 'no distinct Lunara Film angle or reader-pull signal';
 		}
 
 		if ( $this->has_dead_register_density( $title . ' ' . $text ) ) {

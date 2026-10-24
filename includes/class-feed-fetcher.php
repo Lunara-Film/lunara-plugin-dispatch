@@ -206,7 +206,7 @@ class Lunara_Dispatch_Feed_Fetcher {
      */
     private function source_policy_note( array $source, $article_url = '' ) {
         if ( $this->is_world_of_reel_source( $source, $article_url ) ) {
-            return 'World of Reel fast-signal source: attribute when dependent, do not mimic structure or headline logic, and add a distinct Lunara angle.';
+            return 'World of Reel fast-signal source: attribute when dependent, do not mimic structure or headline logic, and add a distinct Lunara Film angle.';
         }
 
         return '';

@@ -49,7 +49,7 @@ final class Lunara_Dispatch_Source_Packet_Builder {
 				? sprintf( 'Reported by %s on %s. The source date, original URL, and available lead image are preserved with this draft.', $source, $published )
 				: sprintf( 'Reported by %s. The original URL and available lead image are preserved with this draft.', $source );
 
-			$editorial_note = 'Editorial brief: this is a source packet, not publishable copy. Verify the reporting, decide what Lunara actually thinks, then rewrite it in the provocative, honest Journal voice before approval.';
+			$editorial_note = 'Editorial brief: this is a source packet, not publishable copy. Verify the reporting, decide what Lunara Film actually thinks, then rewrite it in the provocative, honest Journal voice before approval.';
 			$link_note = sprintf(
 				'Original report: <a href="%s" rel="noopener noreferrer">%s at %s</a>.',
 				esc_url( $url ),

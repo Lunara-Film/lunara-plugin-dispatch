@@ -25,7 +25,7 @@ class Lunara_Dispatch_Blocks {
 
         array_unshift($categories, array(
             'slug'  => 'lunara',
-            'title' => __('Lunara', 'lunara-dispatch'),
+            'title' => __('Lunara Film', 'lunara-dispatch'),
             'icon'  => 'format-aside',
         ));
 
@@ -64,21 +64,21 @@ class Lunara_Dispatch_Blocks {
         );
 
         register_block_type('lunara-dispatch/journal-feed', array_merge($common, array(
-            'title'           => __('Lunara Journal Feed', 'lunara-dispatch'),
+            'title'           => __('Lunara Film Journal Feed', 'lunara-dispatch'),
             'description'     => __('Display Journal entries as cards, list items, or a compact rail.', 'lunara-dispatch'),
             'attributes'      => self::feed_attributes(),
             'render_callback' => array(__CLASS__, 'render_journal_feed'),
         )));
 
         register_block_type('lunara-dispatch/journal-spotlight', array_merge($common, array(
-            'title'           => __('Lunara Journal Spotlight', 'lunara-dispatch'),
+            'title'           => __('Lunara Film Journal Spotlight', 'lunara-dispatch'),
             'description'     => __('Feature the newest Journal story with supporting entries.', 'lunara-dispatch'),
             'attributes'      => self::feed_attributes(array('count' => 4, 'layout' => 'spotlight')),
             'render_callback' => array(__CLASS__, 'render_journal_spotlight'),
         )));
 
         register_block_type('lunara-dispatch/journal-lanes', array_merge($common, array(
-            'title'           => __('Lunara Journal Lanes', 'lunara-dispatch'),
+            'title'           => __('Lunara Film Journal Lanes', 'lunara-dispatch'),
             'description'     => __('Display Journal type links for the many forms the Journal can take.', 'lunara-dispatch'),
             'attributes'      => array(
                 'showCounts' => array('type' => 'boolean', 'default' => true),
@@ -249,7 +249,7 @@ class Lunara_Dispatch_Blocks {
         }
 
         ob_start();
-        echo '<nav class="lunara-journal-lanes" aria-label="' . esc_attr__('Lunara Journal lanes', 'lunara-dispatch') . '">';
+        echo '<nav class="lunara-journal-lanes" aria-label="' . esc_attr__('Lunara Film Journal lanes', 'lunara-dispatch') . '">';
         foreach ($terms as $term) {
             if ($term->slug === 'archive') {
                 continue;

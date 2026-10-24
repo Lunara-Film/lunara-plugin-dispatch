@@ -78,7 +78,7 @@ class Lunara_Dispatch_Image_Handler {
 		$attachment_id = $this->download_and_sideload( $image_url, (int) $parent_post_id, $title );
 
 		if ( is_wp_error( $attachment_id ) ) {
-			error_log( 'Lunara Dispatch: Image sideload failed: ' . $attachment_id->get_error_message() . ' | URL: ' . $image_url );
+			error_log( 'Lunara Film Dispatch: Image sideload failed: ' . $attachment_id->get_error_message() . ' | URL: ' . $image_url );
 			return 0;
 		}
 
@@ -396,7 +396,7 @@ class Lunara_Dispatch_Image_Handler {
 	private function maybe_manual_gd_upscale_attachment( $attachment_id, $file, $width, $height, $target_w, $target_h, $context = '' ) {
 		if ( ! extension_loaded( 'gd' ) ) {
 			update_post_meta( $attachment_id, '_lunara_dispatch_image_quality_state', 'gd_unavailable' );
-			error_log( 'Lunara Dispatch: Upscale fallback skipped for attachment ' . $attachment_id . ' because GD is unavailable. Context: ' . $context );
+			error_log( 'Lunara Film Dispatch: Upscale fallback skipped for attachment ' . $attachment_id . ' because GD is unavailable. Context: ' . $context );
 			return false;
 		}
 
@@ -405,7 +405,7 @@ class Lunara_Dispatch_Image_Handler {
 		$source     = $this->gd_image_from_file( $file, $mime );
 		if ( ! $source ) {
 			update_post_meta( $attachment_id, '_lunara_dispatch_image_quality_state', 'gd_open_failed' );
-			error_log( 'Lunara Dispatch: GD could not open attachment ' . $attachment_id . ' for upscale. Context: ' . $context );
+			error_log( 'Lunara Film Dispatch: GD could not open attachment ' . $attachment_id . ' for upscale. Context: ' . $context );
 			return false;
 		}
 
@@ -413,7 +413,7 @@ class Lunara_Dispatch_Image_Handler {
 		if ( ! $canvas ) {
 			imagedestroy( $source );
 			update_post_meta( $attachment_id, '_lunara_dispatch_image_quality_state', 'gd_canvas_failed' );
-			error_log( 'Lunara Dispatch: GD could not allocate upscale canvas for attachment ' . $attachment_id . '. Context: ' . $context );
+			error_log( 'Lunara Film Dispatch: GD could not allocate upscale canvas for attachment ' . $attachment_id . '. Context: ' . $context );
 			return false;
 		}
 
@@ -430,7 +430,7 @@ class Lunara_Dispatch_Image_Handler {
 		if ( ! $copied ) {
 			imagedestroy( $canvas );
 			update_post_meta( $attachment_id, '_lunara_dispatch_image_quality_state', 'gd_resample_failed' );
-			error_log( 'Lunara Dispatch: GD resample failed for attachment ' . $attachment_id . '. Context: ' . $context );
+			error_log( 'Lunara Film Dispatch: GD resample failed for attachment ' . $attachment_id . '. Context: ' . $context );
 			return false;
 		}
 
@@ -439,7 +439,7 @@ class Lunara_Dispatch_Image_Handler {
 
 		if ( ! $saved ) {
 			update_post_meta( $attachment_id, '_lunara_dispatch_image_quality_state', 'gd_save_failed' );
-			error_log( 'Lunara Dispatch: GD save failed for attachment ' . $attachment_id . '. Context: ' . $context );
+			error_log( 'Lunara Film Dispatch: GD save failed for attachment ' . $attachment_id . '. Context: ' . $context );
 			return false;
 		}
 
@@ -666,7 +666,7 @@ class Lunara_Dispatch_Image_Handler {
 			if ( $best_idx < 0 || $best_score < self::MIN_SECTION_IMAGE_MATCH_SCORE || $match_ratio < self::MIN_SECTION_IMAGE_MATCH_RATIO ) {
 				error_log(
 					sprintf(
-						'Lunara Dispatch: skipped featured image for "%s" because the best source-image match was too weak (score %d, ratio %.2f).',
+						'Lunara Film Dispatch: skipped featured image for "%s" because the best source-image match was too weak (score %d, ratio %.2f).',
 						$section_title,
 						$best_score,
 						$match_ratio

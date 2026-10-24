@@ -105,7 +105,7 @@
     };
 
     blocks.registerBlockType('lunara-dispatch/journal-feed', {
-        title: __('Lunara Journal Feed', 'lunara-dispatch'),
+        title: __('Lunara Film Journal Feed', 'lunara-dispatch'),
         icon: 'format-aside',
         category: 'lunara',
         attributes: feedAttributes,
@@ -119,7 +119,7 @@
     });
 
     blocks.registerBlockType('lunara-dispatch/journal-spotlight', {
-        title: __('Lunara Journal Spotlight', 'lunara-dispatch'),
+        title: __('Lunara Film Journal Spotlight', 'lunara-dispatch'),
         icon: 'welcome-view-site',
         category: 'lunara',
         attributes: Object.assign({}, feedAttributes, {
@@ -136,7 +136,7 @@
     });
 
     blocks.registerBlockType('lunara-dispatch/journal-lanes', {
-        title: __('Lunara Journal Lanes', 'lunara-dispatch'),
+        title: __('Lunara Film Journal Lanes', 'lunara-dispatch'),
         icon: 'category',
         category: 'lunara',
         attributes: {
