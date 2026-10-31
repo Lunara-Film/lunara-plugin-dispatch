@@ -75,6 +75,7 @@ jobs:
           php tests/dispatch-site-studio-runtime.php
           php tests/source-reader-runtime.php
           php tests/source-radar-bridge-runtime.php
+          php tests/dispatch-schedule-runtime.php
 
       - name: JS syntax
         run: |

@@ -52,6 +52,8 @@ class Lunara_Dispatch_Plugin {
         }
 
         add_filter('cron_schedules', array($this, 'add_cron_schedules'));
+        // 3.4.4: a missing schedule comes back on the next load (see ensure_schedule()).
+        add_action('wp_loaded', array(__CLASS__, 'ensure_schedule'));
         add_action(self::CRON_HOOK, array($this, 'run_scheduled'));
         add_action(self::MANUAL_CRON_HOOK, array($this, 'run_manual_scheduled'));
         add_action('update_option_lunara_dispatch_schedule', array($this, 'reschedule_on_frequency_change'), 10, 2);
@@ -265,10 +267,30 @@ class Lunara_Dispatch_Plugin {
 
     public static function on_activate() {
         Lunara_Dispatch_Sources::install_defaults_if_empty();
-        if (!wp_next_scheduled(self::CRON_HOOK)) {
-            $recurrence = self::recurrence_from_setting(class_exists('Lunara_Dispatch_Control_Plane_Client') ? Lunara_Dispatch_Control_Plane_Client::schedule() : get_option('lunara_dispatch_schedule', 'daily'));
-            wp_schedule_event(strtotime('+1 hour'), $recurrence, self::CRON_HOOK);
+        // 3.4.4: activation runs after plugins_loaded, so the plugin instance,
+        // and with it the custom intervals, does not exist yet in this
+        // request. Without them WordPress rejects the every-4-hours event and
+        // nothing is scheduled (found 2026-10-31, when the active copy moved
+        // to the deployed folder). Register the intervals first.
+        add_filter('cron_schedules', array(__CLASS__, 'register_cron_schedules'));
+        self::ensure_schedule();
+    }
+
+    /**
+     * Keep the scheduled run in place while the plugin is active: schedule it
+     * an hour out when it is missing. A run still checks the Control Plane's
+     * on/off switch, so a schedule never turns automation on by itself. Runs
+     * on activation and on every load (wp_loaded), so a schedule lost to an
+     * activation like 3.4.3's comes back on the next request.
+     *
+     * @return void
+     */
+    public static function ensure_schedule() {
+        if (wp_next_scheduled(self::CRON_HOOK)) {
+            return;
         }
+        $recurrence = self::recurrence_from_setting(class_exists('Lunara_Dispatch_Control_Plane_Client') ? Lunara_Dispatch_Control_Plane_Client::schedule() : get_option('lunara_dispatch_schedule', 'daily'));
+        wp_schedule_event(time() + HOUR_IN_SECONDS, $recurrence, self::CRON_HOOK);
     }
 
     public static function on_deactivate() {
@@ -277,6 +299,18 @@ class Lunara_Dispatch_Plugin {
     }
 
     public function add_cron_schedules($schedules) {
+        return self::register_cron_schedules($schedules);
+    }
+
+    /**
+     * The plugin's custom intervals, for the cron_schedules filter. Static, so
+     * activation can register them before the plugin instance exists.
+     *
+     * @param array $schedules Registered intervals.
+     * @return array
+     */
+    public static function register_cron_schedules($schedules) {
+        $schedules = is_array($schedules) ? $schedules : array();
         $schedules['lunara_twice_daily']   = array('interval' => 12 * HOUR_IN_SECONDS, 'display' => __('Twice Daily (Lunara Film)'));
         $schedules['lunara_every_4_hours'] = array('interval' =>  4 * HOUR_IN_SECONDS, 'display' => __('Every 4 Hours (Lunara Film)'));
         $schedules['lunara_every_2_hours'] = array('interval' =>  2 * HOUR_IN_SECONDS, 'display' => __('Every 2 Hours (Lunara Film)'));
