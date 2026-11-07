@@ -43,6 +43,11 @@ class Lunara_Dispatch_Admin {
             'type' => 'boolean',
             'sanitize_callback' => array($this, 'sanitize_enabled'),
         ));
+        // 3.4.5: pitch mode is Dispatch's own switch (not a Control Plane setting), so it is saved here.
+        register_setting('lunara_dispatch_options', 'lunara_dispatch_pitch_mode', array(
+            'type' => 'boolean',
+            'sanitize_callback' => array($this, 'sanitize_pitch_mode'),
+        ));
         register_setting('lunara_dispatch_options', 'lunara_dispatch_schedule', array(
             'type' => 'string',
             'sanitize_callback' => array($this, 'sanitize_schedule'),
@@ -94,6 +99,14 @@ class Lunara_Dispatch_Admin {
             static function ($candidate) { return empty($candidate) ? 0 : 1; },
             0
         );
+    }
+
+    /**
+     * Pitch mode on (1): a run files what it finds as pitches in the Hub and writes only approved pitches.
+     * Off (0): a run writes Journal drafts from the feeds directly. Never publishes either way.
+     */
+    public function sanitize_pitch_mode($value) {
+        return empty($value) ? 0 : 1;
     }
 
     public function sanitize_schedule($value) {
@@ -250,6 +263,7 @@ class Lunara_Dispatch_Admin {
 
     public function settings_page() {
         $this->plugin->ensure_services();
+        $pitch_mode_on = class_exists('Lunara_Dispatch_Pitches') && method_exists('Lunara_Dispatch_Pitches', 'enabled') && Lunara_Dispatch_Pitches::enabled();
         $foundation_ready = $this->foundation_ready();
         $runtime        = class_exists('Lunara_Dispatch_Control_Plane_Client')
             ? ($foundation_ready ? Lunara_Dispatch_Control_Plane_Client::runtime_config() : Lunara_Dispatch_Control_Plane_Client::legacy_runtime_config())
@@ -322,6 +336,7 @@ class Lunara_Dispatch_Admin {
                 <p style="margin:0 0 8px; color:#cccccc;"><strong>Active sources:</strong> <?php echo esc_html((string) count($enabled_sources)); ?> enabled sources<?php if (!$foundation_ready && !empty($enabled_sources)) : ?> — <?php echo esc_html(implode(', ', array_map(function ($src) { return (string) ($src['label'] ?? 'Source'); }, $enabled_sources))); ?><?php endif; ?>.</p>
                 <p style="margin:0 0 8px; color:<?php echo $foundation_ready ? '#cccccc' : '#ffb4a8'; ?>;"><strong>Journal Foundation dependency:</strong> <?php echo esc_html($foundation_ready ? 'Ready' : 'Required plugin missing or protocol-incompatible; draft creation is stopped'); ?></p>
                 <p style="margin:0 0 8px; color:#cccccc;"><strong>Live post behavior:</strong> New Journal entries are forcibly created as <code style="color:#c9a961;">draft</code> through the Control Plane.</p>
+                <p style="margin:0 0 8px; color:#cccccc;"><strong>Pitch mode:</strong> <?php echo $pitch_mode_on ? 'On. Runs file pitches in the Hub and write only approved pitches.' : 'Off. Runs write Journal drafts from the feeds directly.'; ?></p>
                 <p style="margin:0 0 8px; color:#cccccc;"><strong>Last topic-overlap skips:</strong> <?php echo esc_html((string) $last_topic_skips); ?></p>
                 <p style="margin:0 0 8px; color:#cccccc;"><strong>Last quality-gate skips:</strong> <?php echo esc_html((string) $last_quality_skips); ?></p>
                 <?php if (!empty($last_quality_skip_rows)) : ?>
@@ -339,6 +354,11 @@ class Lunara_Dispatch_Admin {
 
             <?php $this->render_visual_assignment_queue(); ?>
 
+            <?php
+            // 3.4.5: the one Dispatch-owned workflow switch. Saved by this form in both branches.
+            $pitch_mode_field = '<input type="checkbox" name="lunara_dispatch_pitch_mode" value="1" ' . checked(1, $pitch_mode_on ? 1 : 0, false) . ' />'
+                . '<p style="color:#cccccc;font-size:13px;margin:6px 0 0;">On: each run files the stories it finds as pitches in the Hub and writes only the pitches you approve. Off: each run writes Journal drafts from the feeds directly. Drafts only, either way.</p>';
+            ?>
             <form method="post" action="options.php">
                 <?php settings_fields('lunara_dispatch_options'); ?>
 
@@ -363,6 +383,7 @@ class Lunara_Dispatch_Admin {
                         <?php $this->row('Active Provider', esc_html($providers[$provider] ?? ucfirst($provider))); ?>
                         <?php $this->row('Active Model', '<code style="color:#c9a961;">' . esc_html($active_model) . '</code>'); ?>
                         <?php $this->row('Max Output Tokens', esc_html((string) ((int) ($runtime['max_tokens'] ?? 2200)))); ?>
+                        <?php $this->row('Pitch Mode', $pitch_mode_field); ?>
                         <?php $this->row('Editorial Voice', 'Managed in Journal Control Plane'); ?>
                         <?php $this->row('Prompt', 'Managed in Journal Control Plane'); ?>
                         <?php $this->row('Sources', esc_html((string) count($enabled_sources)) . ' enabled sources'); ?>
@@ -372,6 +393,7 @@ class Lunara_Dispatch_Admin {
                 <h2 style="color:#c9a961; font-family:'Trebuchet MS',sans-serif; text-transform:uppercase; border-bottom:1px solid #c9a961; padding-bottom:6px;">General</h2>
                 <table style="width:100%;">
                     <?php $this->row('Enable Automation', '<input type="checkbox" name="lunara_dispatch_enabled" value="1" ' . checked(1, get_option('lunara_dispatch_enabled'), false) . ' />'); ?>
+                    <?php $this->row('Pitch Mode', $pitch_mode_field); ?>
                     <?php
                     $this->row('Editorial Destination', '<strong style="color:#fff;">Journal drafts only</strong><p style="color:#cccccc;font-size:13px;margin:6px 0 0;">Dispatch cannot publish or target another post type. Final publication always remains a human editorial action.</p>');
 
@@ -426,7 +448,7 @@ class Lunara_Dispatch_Admin {
                 $this->provider_block('xAI Grok',            'grok',   'grok-4',          'xai-...', $include_models);
                 ?>
 
-                <?php submit_button($foundation_ready ? 'Save Provider Keys' : 'Save Settings', 'primary', 'submit', false, array('style' => 'background-color: #c9a961; color: #0a1520; font-family:\'Trebuchet MS\',sans-serif; text-transform:uppercase; border:none; padding:10px 20px; margin-top:20px;')); ?>
+                <?php submit_button('Save Settings', 'primary', 'submit', false, array('style' => 'background-color: #c9a961; color: #0a1520; font-family:\'Trebuchet MS\',sans-serif; text-transform:uppercase; border:none; padding:10px 20px; margin-top:20px;')); ?>
             </form>
 
             <h2 style="color:#c9a961; font-family:'Trebuchet MS',sans-serif; text-transform:uppercase; border-bottom:1px solid #c9a961; padding-bottom:6px; margin-top:40px;">RSS Sources</h2>
