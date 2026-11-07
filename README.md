@@ -14,7 +14,11 @@ Dispatch aggregates film-news sources, routes eligible items through the Lunara 
 
 ## Version
 
-Current baseline: `3.4.0`.
+Current baseline: `3.4.5`.
+
+### 3.4.5 Pitch mode has a switch on the Dispatch screen
+
+- Pitch mode (`lunara_dispatch_pitch_mode`) could be changed only through the Hub's `pitches/mode` endpoint, so a Journal that fell silent (pitches filed, none approved, nothing written) had no switch in wp-admin. The Dispatch settings screen now shows the state in Automation Health and saves a Pitch Mode checkbox in both the Journal Foundation branch and the legacy branch. Drafts only, either way.
 
 ### 3.4.0 Claude writes the Journal
 
