@@ -67,6 +67,11 @@ function wp_kses_post( $value ) {
     return (string) $value;
 }
 
+function wp_trim_words( $text, $count = 55, $more = null ) {
+    $words = preg_split( '/\s+/', trim( strip_tags( (string) $text ) ) );
+    return count( $words ) > $count ? implode( ' ', array_slice( $words, 0, $count ) ) . (string) $more : implode( ' ', $words );
+}
+
 // Foundation sanitizer is a service boundary here; its real HTML behavior is
 // covered in Foundation. This spy proves Dispatch delegates and stops on error.
 class Lunara_Journal_Ingest_HTML {
@@ -250,6 +255,7 @@ function dispatch_runtime_assert( $condition, $message, &$failures ) {
 require_once $root . DIRECTORY_SEPARATOR . 'includes/class-control-plane-client.php';
 require_once $root . DIRECTORY_SEPARATOR . 'includes/class-journal-ingest-bridge.php';
 require_once $root . DIRECTORY_SEPARATOR . 'includes/class-post-builder.php';
+require_once $root . DIRECTORY_SEPARATOR . 'includes/class-prompts.php';
 require_once $root . DIRECTORY_SEPARATOR . 'includes/class-source-packet-builder.php';
 require_once $root . DIRECTORY_SEPARATOR . 'includes/class-image-handler.php';
 require_once $root . DIRECTORY_SEPARATOR . 'includes/class-feed-fetcher.php';
@@ -456,6 +462,36 @@ $rejected = $rejecting_builder->split_into_individual_posts(
 dispatch_runtime_assert( array() === $rejected && 1 === count( $rejecting_builder->get_last_insertion_failures() ), 'Post Builder did not surface the rejected input as an insertion failure', $failures );
 dispatch_runtime_assert( $before_rejected_write === count( $dispatch_filter_calls ), 'Rejected content reached the Foundation write filter', $failures );
 Lunara_Journal_Ingest_HTML::$error = null;
+
+// 3.4.6: the exact answer shape the Control Plane asks for (one <h3> entry, no
+// <hr>) goes through the real builder, its gates and the bridge, and becomes
+// exactly one Foundation draft with the headline as its title.
+$single_entry_writes = array();
+$dispatch_filter_handler = static function ( $initial, $incoming ) use ( &$single_entry_writes ) {
+    unset( $initial );
+    $single_entry_writes[] = $incoming;
+    return array(
+        'post_id' => 91,
+        'created' => true,
+        'post_status' => 'draft',
+        'idempotency_key' => $incoming['idempotency_key'],
+    );
+};
+$single_entry_html = '<h3>A Film Finds Distribution, and the Terms Are the Story</h3>'
+    . '<p>Example Trade reports that the festival drama closed its distribution deal this week, and the studio is taking the theatrical window seriously for once. That is the part worth your attention, because the director spent a year saying the movie needed a real release.</p>'
+    . '<p>The acquisition covers a theatrical run before streaming, according to the report. The festival premiere drew the kind of reviews that give a small movie leverage, and the distributor is paying for that leverage instead of burying the film on a platform.</p>'
+    . '<p>I think this is the right fight. A drama like this lives or dies on whether an audience can find it in a theater in its first month. Does a real release still change what a small film becomes, or has the audience already moved on?</p>';
+$single_builder = new Lunara_Dispatch_Post_Builder();
+$single_ids     = $single_builder->split_into_individual_posts( $single_entry_html, array(), 'journal', 'draft', $context );
+dispatch_runtime_assert( array( 91 ) === $single_ids, 'one <h3> entry with no <hr> did not become one Foundation draft: ' . json_encode( array( $single_ids, $single_builder->get_last_quality_gate_skips(), $single_builder->get_last_insertion_failures() ) ), $failures );
+dispatch_runtime_assert( 1 === count( $single_entry_writes ), 'the single entry did not reach the Foundation write filter exactly once', $failures );
+if ( 1 === count( $single_entry_writes ) ) {
+    $single_write = $single_entry_writes[0];
+    dispatch_runtime_assert( 'A Film Finds Distribution, and the Terms Are the Story' === ( $single_write['title'] ?? '' ), 'the single entry headline did not become the draft title', $failures );
+    dispatch_runtime_assert( false === stripos( (string) ( $single_write['content'] ?? '' ), '<h3' ), 'the single entry headline is repeated in the draft body', $failures );
+    dispatch_runtime_assert( 'https://example.com/story' === ( $single_write['source_items'][0]['source_url'] ?? '' ), 'the single entry draft lost its source URL', $failures );
+}
+$dispatch_filter_handler = null;
 
 if ( $failures ) {
     fwrite( STDERR, "Dispatch integration runtime failed:\n- " . implode( "\n- ", $failures ) . "\n" );

@@ -101,6 +101,51 @@ class Lunara_Dispatch_Admin {
         );
     }
 
+    /** Runs in a row without a new draft before the Automation Health line turns into a warning. */
+    const QUIET_RUNS_WARNING = 3;
+
+    /**
+     * The stored run reports as display rows, newest first.
+     *
+     * @param array $history Reports from Lunara_Dispatch_Plugin::get_run_history().
+     * @return array[] Rows with when, ok, created and message.
+     */
+    public static function summarize_run_history($history) {
+        $rows = array();
+        foreach (is_array($history) ? $history : array() as $report) {
+            if (!is_array($report)) {
+                continue;
+            }
+            $timestamp = isset($report['timestamp_gmt']) ? (string) $report['timestamp_gmt'] : '';
+            $rows[] = array(
+                'when'    => '' !== $timestamp ? get_date_from_gmt($timestamp, 'M j, g:i a') : 'time not recorded',
+                'ok'      => !empty($report['success']),
+                'created' => isset($report['created']) ? (int) $report['created'] : 0,
+                'message' => isset($report['message']) && '' !== (string) $report['message'] ? (string) $report['message'] : 'No run message recorded.',
+            );
+        }
+        return $rows;
+    }
+
+    /**
+     * How many of the newest runs in a row wrote no draft. A "Completed" run
+     * that writes nothing is not a fault by itself; several in a row is the
+     * sign that the Journal has gone quiet.
+     *
+     * @param array $history Reports, newest first.
+     * @return int
+     */
+    public static function runs_since_last_draft($history) {
+        $count = 0;
+        foreach (is_array($history) ? $history : array() as $report) {
+            if (is_array($report) && !empty($report['created'])) {
+                break;
+            }
+            $count++;
+        }
+        return $count;
+    }
+
     /**
      * Pitch mode on (1): a run files what it finds as pitches in the Hub and writes only approved pitches.
      * Off (0): a run writes Journal drafts from the feeds directly. Never publishes either way.
@@ -284,6 +329,15 @@ class Lunara_Dispatch_Admin {
         $last_run     = !empty($last_report['timestamp_gmt']) ? get_date_from_gmt($last_report['timestamp_gmt'], 'F j, Y g:i a') : 'No completed runs recorded yet';
         $last_state   = isset($last_report['success']) ? (!empty($last_report['success']) ? 'Healthy' : 'Needs attention') : 'Unknown';
         $last_message = !empty($last_report['message']) ? $last_report['message'] : 'No run message recorded yet.';
+        // 3.4.6: the stored run history, so a quiet Journal can be explained from this screen.
+        $run_history_raw = method_exists($this->plugin, 'get_run_history') ? $this->plugin->get_run_history() : array();
+        $run_history     = self::summarize_run_history($run_history_raw);
+        $runs_without_draft = self::runs_since_last_draft($run_history_raw);
+        $runs_without_draft_label = empty($run_history_raw)
+            ? 'no runs recorded yet'
+            : ($runs_without_draft >= count($run_history_raw)
+                ? sprintf('%d or more (no run in the stored history wrote a draft)', $runs_without_draft)
+                : (string) $runs_without_draft);
         $last_topic_skips = isset($last_report['skipped_topic_duplicates']) ? (int) $last_report['skipped_topic_duplicates'] : 0;
         $last_quality_skips = isset($last_report['skipped_quality_gate']) ? (int) $last_report['skipped_quality_gate'] : 0;
         $last_quality_skip_rows = isset($last_report['quality_gate_skips']) && is_array($last_report['quality_gate_skips']) ? $last_report['quality_gate_skips'] : array();
@@ -349,7 +403,33 @@ class Lunara_Dispatch_Admin {
                 <p style="margin:0 0 8px; color:#cccccc;"><strong>Source-image opt-outs:</strong> <?php echo esc_html((string) $last_image_blocked_sources); ?></p>
                 <p style="margin:0 0 8px; color:#cccccc;"><strong>Last source-story image path:</strong> <?php echo esc_html((string) $last_source_items_with_image); ?> discovered / <?php echo esc_html((string) $last_item_images_sideloaded); ?> imported / <?php echo esc_html((string) $last_section_images_matched); ?> matched / <?php echo esc_html((string) $last_created_with_featured_image); ?> attached.</p>
                 <p style="margin:0 0 8px; color:#cccccc;"><strong>Last AI path:</strong> <?php echo esc_html($last_ai_fallback ? 'Source-packet fallback (no AI charge)' : $last_ai_model); ?>; estimated request cost <?php echo esc_html($last_ai_fallback ? '$0.0000' : $last_ai_cost); ?>.</p>
-                <p style="margin:0; color:#cccccc;"><strong>Last run note:</strong> <?php echo esc_html($last_message); ?></p>
+                <p style="margin:0 0 8px; color:#cccccc;"><strong>Last run note:</strong> <?php echo esc_html($last_message); ?></p>
+                <p style="margin:0; color:<?php echo $runs_without_draft >= self::QUIET_RUNS_WARNING ? '#ffb4a8' : '#cccccc'; ?>;"><strong>Runs since the last new draft:</strong> <?php echo esc_html($runs_without_draft_label); ?></p>
+                <?php if (!empty($run_history)) : ?>
+                    <details style="margin:14px 0 0;">
+                        <summary style="cursor:pointer; color:#c9a961; font-family:'Trebuchet MS',sans-serif; text-transform:uppercase; font-size:13px;">Recent runs (<?php echo esc_html((string) count($run_history)); ?>)</summary>
+                        <table style="width:100%; margin-top:10px; border-collapse:collapse; font-size:13px; color:#cccccc;">
+                            <thead>
+                                <tr>
+                                    <th scope="col" style="text-align:left; padding:6px 10px 6px 0; border-bottom:1px solid rgba(201,169,97,.35); white-space:nowrap;">Run</th>
+                                    <th scope="col" style="text-align:left; padding:6px 10px; border-bottom:1px solid rgba(201,169,97,.35);">Result</th>
+                                    <th scope="col" style="text-align:right; padding:6px 10px; border-bottom:1px solid rgba(201,169,97,.35);">Drafts</th>
+                                    <th scope="col" style="text-align:left; padding:6px 0 6px 10px; border-bottom:1px solid rgba(201,169,97,.35);">Note</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($run_history as $history_row) : ?>
+                                    <tr>
+                                        <td style="padding:6px 10px 6px 0; border-bottom:1px solid rgba(255,255,255,.08); white-space:nowrap; vertical-align:top;"><?php echo esc_html($history_row['when']); ?></td>
+                                        <td style="padding:6px 10px; border-bottom:1px solid rgba(255,255,255,.08); white-space:nowrap; vertical-align:top; color:<?php echo $history_row['ok'] ? '#cccccc' : '#ffb4a8'; ?>;"><?php echo esc_html($history_row['ok'] ? 'Completed' : 'Needs attention'); ?></td>
+                                        <td style="padding:6px 10px; border-bottom:1px solid rgba(255,255,255,.08); text-align:right; vertical-align:top;"><?php echo esc_html((string) $history_row['created']); ?></td>
+                                        <td style="padding:6px 0 6px 10px; border-bottom:1px solid rgba(255,255,255,.08); vertical-align:top;"><?php echo esc_html($history_row['message']); ?></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </details>
+                <?php endif; ?>
             </div>
 
             <?php $this->render_visual_assignment_queue(); ?>
