@@ -125,17 +125,29 @@ class Lunara_Dispatch_Post_Builder {
 	 */
 	public function extract_hr_sections_with_body( $html ) {
 		$sections = array();
-		if ( empty( $html ) || false === stripos( $html, '<hr' ) ) {
+		$html     = self::unwrap_code_fence( $html );
+		if ( '' === $html ) {
 			return $sections;
 		}
 
-		$parts = preg_split( '/<hr\b[^>]*\/?>/i', $html );
+		if ( false === stripos( $html, '<hr' ) ) {
+			// 3.4.6: the Control Plane asks for one entry per run, and "separate
+			// entries with <hr>" gives a lone entry no separator. A headline and
+			// at least one paragraph is that one entry. Anything else (a refusal,
+			// plain prose) is still not an entry.
+			if ( ! preg_match( '/<h3\b[^>]*>.*?<\/h3>/is', $html ) || ! preg_match( '/<p\b[^>]*>.*?<\/p>/is', $html ) ) {
+				return $sections;
+			}
+			$parts = array( $html );
+		} else {
+			$parts = preg_split( '/<hr\b[^>]*\/?>/i', $html );
+		}
 		if ( empty( $parts ) || ! is_array( $parts ) ) {
 			return $sections;
 		}
 
 		foreach ( $parts as $part ) {
-			$body = trim( (string) $part );
+			$body = self::drop_preamble_before_headline( trim( (string) $part ) );
 			if ( '' === $body ) {
 				continue;
 			}
@@ -164,12 +176,54 @@ class Lunara_Dispatch_Post_Builder {
 	 * @return array
 	 */
 	public function extract_sections_with_body( $html ) {
+		$html     = self::unwrap_code_fence( $html );
 		$sections = $this->extract_h2_sections_with_body( $html );
 		if ( ! empty( $sections ) ) {
 			return $sections;
 		}
 
 		return $this->extract_hr_sections_with_body( $html );
+	}
+
+	/**
+	 * Remove a Markdown code fence a model wraps around its HTML by habit
+	 * (```html ... ```). Only a fence that opens the output is removed.
+	 *
+	 * @param string $html Generated output.
+	 * @return string
+	 */
+	public static function unwrap_code_fence( $html ) {
+		$html = trim( (string) $html );
+		if ( 0 !== strpos( $html, '```' ) ) {
+			return $html;
+		}
+		$html = preg_replace( '/^```[a-zA-Z0-9_-]*[ \t]*\R?/', '', $html, 1 );
+		$html = preg_replace( '/\R?```\s*$/', '', (string) $html, 1 );
+
+		return trim( (string) $html );
+	}
+
+	/**
+	 * Drop a plain-prose lead-in ("Here is the entry:") or a comment that sits
+	 * before an entry's <h3> headline, so the headline opens the section and is
+	 * not repeated inside the post body. Markup before the headline is content
+	 * and stays.
+	 *
+	 * @param string $html Section HTML.
+	 * @return string
+	 */
+	private static function drop_preamble_before_headline( $html ) {
+		$html     = (string) $html;
+		$position = stripos( $html, '<h3' );
+		if ( false === $position || 0 === $position ) {
+			return $html;
+		}
+		$lead = trim( (string) preg_replace( '/<!--.*?-->/s', '', substr( $html, 0, $position ) ) );
+		if ( false !== strpos( $lead, '<' ) ) {
+			return $html;
+		}
+
+		return trim( substr( $html, $position ) );
 	}
 
 	/**
@@ -354,7 +408,7 @@ class Lunara_Dispatch_Post_Builder {
 			}
 			$payload['featured_media'] = $featured;
 			if ( $source_packet_mode ) {
-				$payload['acf']['journal_dispatch_conversion_notes'] = 'OpenAI was unavailable. Dispatch preserved a deterministic source packet, provenance, and image candidate for ChatGPT or human review; this is not publishable copy.';
+				$payload['acf']['journal_dispatch_conversion_notes'] = 'The AI provider was unavailable. Dispatch preserved a deterministic source packet, provenance, and image candidate for ChatGPT or human review; this is not publishable copy.';
 			}
 			$ingest  = Lunara_Dispatch_Journal_Ingest_Bridge::ingest_payload( $payload, $author, $run_context );
 			$new_id  = is_wp_error( $ingest ) ? $ingest : (int) $ingest['post_id'];

@@ -25,6 +25,11 @@ class Lunara_Dispatch_Plugin {
     // rest queue straight into the next worker run.
     const PITCHES_PER_RUN = 1;
     const MAX_HOUSE_TELLS = 20;
+    // 3.4.6: a source item whose model answer cannot be read as an entry gets
+    // this many runs, then it is set aside so it cannot hold the queue.
+    const MAX_UNREADABLE_ATTEMPTS = 2;
+    const UNREADABLE_OPTION = 'lunara_dispatch_unreadable_attempts';
+    const UNREADABLE_LIMIT = 200;
 
     /** @var Lunara_Dispatch_Plugin */
     private static $instance = null;
@@ -942,7 +947,22 @@ class Lunara_Dispatch_Plugin {
                     )));
                 }
 
-                return $this->result(false, 'AI returned content but no publishable Journal entries passed the editorial gate.', array_merge($context_data, array(
+                // The model answered, but nothing in the answer could be read as a
+                // Journal entry. Each item gets MAX_UNREADABLE_ATTEMPTS runs; then
+                // it is set aside, so an unreadable story cannot be sent to the
+                // model on every run or keep an approved pitch in front of the feeds.
+                $set_aside = $this->note_unreadable_attempt($items);
+                if (!empty($set_aside)) {
+                    $this->record_source_radar_outcome($set_aside, 'editorial_skip');
+                    $this->settle_pitches($set_aside, 'skipped', array(), sprintf('The writer returned no readable entry in %d runs.', self::MAX_UNREADABLE_ATTEMPTS));
+                    $this->feed_fetcher->mark_seen($set_aside);
+                }
+                $unreadable_note = count($set_aside) === count($items)
+                    ? sprintf(' %d source item(s) set aside after %d attempts.', count($set_aside), self::MAX_UNREADABLE_ATTEMPTS)
+                    : sprintf(' %d source item(s) stay eligible for one more run.', count($items) - count($set_aside));
+
+                return $this->result(false, 'AI returned content but no publishable Journal entries passed the editorial gate.' . $unreadable_note, array_merge($context_data, array(
+					'retry_required'           => count($set_aside) < count($items),
 					'feed_errors'              => $errors,
 					'skipped_duplicates'       => $skipped,
 					'skipped_topic_duplicates' => $topic_duplicate_count,
@@ -991,11 +1011,12 @@ class Lunara_Dispatch_Plugin {
                 $this->record_source_radar_outcome( $items, 'drafted', $created_post_ids );
                 $this->settle_pitches($items, 'written', $created_post_ids);
                 $this->feed_fetcher->mark_seen($items);
+                $this->forget_unreadable_attempts($items);
             }
 
             $result_message = $ai_fallback_used
                 ? sprintf(
-                    'OpenAI was unavailable, so Dispatch created %d safe source-packet draft(s) from %d source item(s). Featured images attached to %d/%d draft(s); editorial review remains required.',
+                    'The AI provider was unavailable, so Dispatch created %d safe source-packet draft(s) from %d source item(s). Featured images attached to %d/%d draft(s); editorial review remains required.',
                     count($created_post_ids),
                     count($items),
                     $created_with_featured_image,
@@ -1035,9 +1056,83 @@ class Lunara_Dispatch_Plugin {
 				'post_status'        => $post_status,
 				'post_status_label'  => $this->get_status_label($post_status),
             )));
+        } catch (\Throwable $error) {
+            // 3.4.6: a run that dies leaves a report. Before this, a fatal error
+            // inside the run wrote nothing and the screen kept the older run's "Healthy".
+            $detail = sanitize_text_field(get_class($error) . ': ' . $error->getMessage());
+            $detail = function_exists('mb_substr') ? mb_substr($detail, 0, 200) : substr($detail, 0, 200);
+            error_log('Lunara Film Dispatch: the run stopped on an internal error. ' . $detail);
+
+            return $this->result(false, 'The Dispatch run stopped on an internal error and wrote no drafts. ' . $detail, array(
+                'retry_required' => true,
+                'ai_error_code'  => 'internal_error',
+            ));
         } finally {
             $this->release_lock($lock_owner);
         }
+    }
+
+    /**
+     * Count one unreadable model answer against each item of the run and
+     * return the items that have used every attempt.
+     *
+     * @param array $items Source items of this run.
+     * @return array Items to set aside.
+     */
+    private function note_unreadable_attempt(array $items) {
+        $attempts = get_option(self::UNREADABLE_OPTION, array());
+        if (!is_array($attempts)) {
+            $attempts = array();
+        }
+        $set_aside = array();
+        foreach ($items as $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            $key   = $this->unreadable_key($item);
+            $count = (int) ($attempts[$key] ?? 0) + 1;
+            // Unset first, so a counted item is re-appended and the oldest entries are the ones trimmed.
+            unset($attempts[$key]);
+            if ($count >= self::MAX_UNREADABLE_ATTEMPTS) {
+                $set_aside[] = $item;
+            } else {
+                $attempts[$key] = $count;
+            }
+        }
+        if (count($attempts) > self::UNREADABLE_LIMIT) {
+            $attempts = array_slice($attempts, -self::UNREADABLE_LIMIT, null, true);
+        }
+        update_option(self::UNREADABLE_OPTION, $attempts, false);
+
+        return $set_aside;
+    }
+
+    /** A written item starts clean if the same story is ever offered again. */
+    private function forget_unreadable_attempts(array $items) {
+        $attempts = get_option(self::UNREADABLE_OPTION, array());
+        if (!is_array($attempts) || empty($attempts)) {
+            return;
+        }
+        $before = count($attempts);
+        foreach ($items as $item) {
+            if (is_array($item)) {
+                unset($attempts[$this->unreadable_key($item)]);
+            }
+        }
+        if (count($attempts) !== $before) {
+            update_option(self::UNREADABLE_OPTION, $attempts, false);
+        }
+    }
+
+    private function unreadable_key(array $item) {
+        if (!empty($item['pitch_id'])) {
+            return 'pitch:' . sanitize_key((string) $item['pitch_id']);
+        }
+        if (!empty($item['fingerprint'])) {
+            return 'item:' . sanitize_key((string) $item['fingerprint']);
+        }
+
+        return 'item:' . md5(strtolower((string) ($item['url'] ?? '')) . '|' . (string) ($item['title'] ?? ''));
     }
 
     /**
