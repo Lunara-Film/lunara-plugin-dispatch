@@ -247,6 +247,8 @@ class Lunara_Dispatch_Plugin {
 			'ai_usage' => array( 'effective_model' => 'foundation-active-model', 'estimated_cost_usd' => 0.0042 ),
 		);
 	}
+	public static $history = array();
+	public function get_run_history() { return self::$history; }
 	public function get_status_label( $status ) { return $status; }
 	public function queue_manual_run() { return array( 'success' => true ); }
 }
@@ -288,6 +290,44 @@ if ( is_callable( $openai_key_callback ) ) {
 	dispatch_admin_assert( 'OLD-OPENAI-SECRET' === call_user_func( $openai_key_callback, '' ), 'Blank provider key submissions must preserve the existing secret.' );
 }
 
+// 3.4.6: Automation Health reads the stored run history. Newest first: one failed run, two quiet runs, one run that wrote drafts.
+Lunara_Dispatch_Plugin::$history = array(
+	array( 'timestamp_gmt' => '2026-11-11 09:10:00', 'success' => false, 'created' => 0, 'message' => 'Note <script>alert(1)</script> end' ),
+	array( 'timestamp_gmt' => '2026-11-11 05:10:00', 'success' => true, 'created' => 0, 'message' => 'No new items to import across all enabled sources.' ),
+	array( 'timestamp_gmt' => '2026-11-11 01:10:00', 'success' => true, 'created' => 0, 'message' => 'Skipped 1 generated Journal entry.' ),
+	array( 'timestamp_gmt' => '2026-11-10 21:10:00', 'success' => true, 'created' => 2, 'message' => 'Created 2 draft post(s).' ),
+);
+ob_start();
+$admin->settings_page();
+$ready_html = ob_get_clean();
+
+$quiet_line_pattern = '/<p style="([^"]*)"><strong>Runs since the last new draft:<\/strong>\s*([^<]*)<\/p>/';
+dispatch_admin_assert( 1 === preg_match( $quiet_line_pattern, $ready_html, $quiet_line ) && '3' === trim( $quiet_line[2] ), 'Automation Health did not count three runs since the last new draft.' );
+dispatch_admin_assert( false === strpos( $ready_html, '<script>alert(1)' ) && false !== strpos( $ready_html, 'Note &lt;script&gt;alert(1)&lt;/script&gt; end' ), 'A run note reached the settings screen unescaped.' );
+dispatch_admin_assert( 1 === preg_match( '/<details\b.*?<tbody>(.*?)<\/tbody>.*?<\/details>/s', $ready_html, $history_table ) && 4 === substr_count( $history_table[1], '<tr>' ), 'The recent-runs table does not hold one row per stored run.' );
+dispatch_admin_assert( isset( $history_table[1] ) && 1 === substr_count( $history_table[1], 'Needs attention' ) && 3 === substr_count( $history_table[1], 'Completed' ), 'The recent-runs table does not mark the failed run.' );
+dispatch_admin_assert( strpos( $ready_html, '</details>' ) < strpos( $ready_html, '<form method="post" action="options.php">' ), 'The run history must stay outside the settings form.' );
+
+Lunara_Dispatch_Plugin::$history = array_slice( Lunara_Dispatch_Plugin::$history, 1, 2 );
+ob_start();
+$admin->settings_page();
+$all_quiet_html = ob_get_clean();
+dispatch_admin_assert( 1 === preg_match( $quiet_line_pattern, $all_quiet_html, $all_quiet_line ) && 0 === strpos( trim( $all_quiet_line[2] ), '2 or more' ), 'A history with no draft did not read as "2 or more" quiet runs.' );
+
+Lunara_Dispatch_Plugin::$history = array( array( 'timestamp_gmt' => '2026-11-11 09:10:00', 'success' => true, 'created' => 1, 'message' => 'Created 1 draft post(s).' ) );
+ob_start();
+$admin->settings_page();
+$fresh_html = ob_get_clean();
+dispatch_admin_assert( 1 === preg_match( $quiet_line_pattern, $fresh_html, $fresh_line ) && '0' === trim( $fresh_line[2] ), 'A history that opens on a new draft did not count zero quiet runs.' );
+dispatch_admin_assert( isset( $quiet_line[1], $fresh_line[1] ) && $quiet_line[1] !== $fresh_line[1], 'Three quiet runs are not shown differently from a run that just wrote a draft.' );
+
+Lunara_Dispatch_Plugin::$history = array();
+ob_start();
+$admin->settings_page();
+$no_history_html = ob_get_clean();
+dispatch_admin_assert( false === strpos( $no_history_html, '<details' ) && 1 === preg_match( $quiet_line_pattern, $no_history_html, $no_history_line ) && 'no runs recorded yet' === trim( $no_history_line[2] ), 'A site with no run history did not render a plain line and no table.' );
+
+Lunara_Dispatch_Plugin::$history = array();
 ob_start();
 $admin->settings_page();
 $ready_html = ob_get_clean();

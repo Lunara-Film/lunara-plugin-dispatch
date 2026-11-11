@@ -615,6 +615,10 @@ class Lunara_Dispatch_Plugin {
             return $this->result(false, 'Another dispatch run is already in progress. Try again in a minute.');
         }
 
+        // What the catch below may say about drafts depends on how far the run got.
+        $created_post_ids   = array();
+        $draft_step_started = false;
+
         try {
             // Pitch gate: stories Dalton approved in the hub are written first
             // (no feed pull). Otherwise, with pitch mode on, the run only files
@@ -854,6 +858,7 @@ class Lunara_Dispatch_Plugin {
             $item_images_sideloaded = 0;
             $section_images_matched = 0;
 
+			$draft_step_started = true;
 			$created_post_ids = $this->post_builder->split_into_individual_posts(
 				$generated,
 				array(),
@@ -1061,12 +1066,25 @@ class Lunara_Dispatch_Plugin {
             // inside the run wrote nothing and the screen kept the older run's "Healthy".
             $detail = sanitize_text_field(get_class($error) . ': ' . $error->getMessage());
             $detail = function_exists('mb_substr') ? mb_substr($detail, 0, 200) : substr($detail, 0, 200);
-            error_log('Lunara Film Dispatch: the run stopped on an internal error. ' . $detail);
+            // The log keeps the location the uncaught error used to give; the stored report does not.
+            error_log(sprintf('Lunara Film Dispatch: the run stopped on an internal error. %s in %s:%d', $detail, $error->getFile(), $error->getLine()));
 
-            return $this->result(false, 'The Dispatch run stopped on an internal error and wrote no drafts. ' . $detail, array(
+            $extra = array(
                 'retry_required' => true,
                 'ai_error_code'  => 'internal_error',
-            ));
+            );
+            if (!$draft_step_started) {
+                $summary = 'The Dispatch run stopped on an internal error and wrote no drafts.';
+            } elseif (!empty($created_post_ids)) {
+                $summary = sprintf('The Dispatch run stopped on an internal error after writing %d draft(s); the source items were not marked seen.', count($created_post_ids));
+                $extra['post_ids'] = $created_post_ids;
+                $extra['created']  = count($created_post_ids);
+            } else {
+                // The error came from inside the draft step, so the count is not known.
+                $summary = 'The Dispatch run stopped on an internal error while writing drafts; check the Journal drafts.';
+            }
+
+            return $this->result(false, $summary . ' ' . $detail, $extra);
         } finally {
             $this->release_lock($lock_owner);
         }

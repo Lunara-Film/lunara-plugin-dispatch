@@ -59,7 +59,41 @@ foreach ( array( "```html\n" . $entry . "\n```", "```\n" . $entry . "\n```", "  
 	single_entry_check( false === strpos( (string) ( $unfenced[0]['body'] ?? '`' ), '`' ), 'the code fence leaked into the body' );
 	single_entry_check( 'The Sequel Deal Is the Real Story' === ( $unfenced[0]['title'] ?? '' ), 'a code-fenced entry lost its headline' );
 }
+// A model that does both: a lead-in line, the fenced entry, then a chat line. None of it reaches the draft.
+foreach ( array(
+	'a lead-in before the fence'     => "Here is the entry:\n\n```html\n" . $entry . "\n```",
+	'chat text after the fence'      => "```html\n" . $entry . "\n```\n\nLet me know if you would like a different angle.",
+	'a lead-in and chat text'        => "Here is the entry:\r\n\r\n```html\r\n" . $entry . "\r\n```\r\n\r\nLet me know if you would like a different angle.",
+	'a byte order mark and a fence'  => "\xEF\xBB\xBF```html\n" . $entry . "\n```",
+) as $label => $chatty ) {
+	$quiet = $builder->extract_sections_with_body( $chatty );
+	$body  = (string) ( $quiet[0]['body'] ?? '`' );
+	single_entry_check( 1 === count( $quiet ) && 'The Sequel Deal Is the Real Story' === $quiet[0]['title'], $label . ': the entry did not become one section with its headline' );
+	single_entry_check( false === strpos( $body, '`' ) && false === strpos( $body, 'Let me know' ) && false === strpos( $body, 'Here is' ), $label . ': fence or chat text reached the body' );
+	single_entry_check( 0 === strpos( $body, '<p>Deadline reports' ) && '</p>' === substr( $body, -4 ), $label . ': the body is not exactly the paragraphs' );
+}
+$fenced_pair = $builder->extract_sections_with_body( "Two entries:\n\n```html\n" . $entry . '<hr>' . $second . "\n```\n\nDone." );
+single_entry_check( 2 === count( $fenced_pair ) && false === strpos( $fenced_pair[1]['body'], '`' ) && false === strpos( $fenced_pair[1]['body'], 'Done.' ), 'a fenced pair of entries kept the fence or the chat text' );
+
+// A whole HTML document is reduced to its body: no <meta>, no <title> text, and the headline opens the entry.
+foreach ( array(
+	'a full document'           => "<!DOCTYPE html>\n<html lang=\"en\">\n<head>\n<meta charset=\"UTF-8\">\n<title>Journal</title>\n<style>p{margin:0}</style>\n</head>\n<body>\n" . $entry . "\n</body>\n</html>",
+	'a fenced full document'    => "```html\n<!DOCTYPE html>\n<html><head><title>Journal</title></head><body class=\"x\">" . $entry . "</body></html>\n```",
+	'html and body only'        => '<html><body>' . $entry . '</body></html>',
+	'a body that never closes'  => '<html><head><title>Journal</title></head><body>' . $entry,
+) as $label => $document ) {
+	$from_document = $builder->extract_sections_with_body( $document );
+	$body          = (string) ( $from_document[0]['body'] ?? '<h3' );
+	single_entry_check( 1 === count( $from_document ) && 'The Sequel Deal Is the Real Story' === $from_document[0]['title'], $label . ': the entry did not become one section with its headline' );
+	single_entry_check( 0 === strpos( $body, '<p>Deadline reports' ), $label . ': the body does not open on the first paragraph' );
+	foreach ( array( '<h3', '<meta', '<title', '<style', '<body', '</html', 'Journal</title>' ) as $leak ) {
+		single_entry_check( false === stripos( $body, $leak ), $label . ': ' . $leak . ' reached the body' );
+	}
+}
+
 single_entry_check( $entry === Lunara_Dispatch_Post_Builder::unwrap_code_fence( $entry ), 'output with no fence was changed' );
+$fence_after_markup = '<h3>Title</h3><p>The command is:</p>' . "\n```\nrun --fast\n```";
+single_entry_check( $fence_after_markup === Lunara_Dispatch_Post_Builder::unwrap_code_fence( $fence_after_markup ), 'a fence that comes after markup was removed' );
 $inline_ticks = '<h3>Title</h3><p>The script calls it ```raw``` footage.</p>';
 single_entry_check( $inline_ticks === Lunara_Dispatch_Post_Builder::unwrap_code_fence( $inline_ticks ), 'backticks inside the entry were treated as a fence' );
 

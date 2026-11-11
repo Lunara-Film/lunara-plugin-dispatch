@@ -187,20 +187,43 @@ class Lunara_Dispatch_Post_Builder {
 
 	/**
 	 * Remove a Markdown code fence a model wraps around its HTML by habit
-	 * (```html ... ```). Only a fence that opens the output is removed.
+	 * (```html ... ```), with a prose lead-in before it and prose after it.
+	 * A fence that comes after markup, and backticks inside a paragraph, stay.
 	 *
 	 * @param string $html Generated output.
 	 * @return string
 	 */
 	public static function unwrap_code_fence( $html ) {
 		$html = trim( (string) $html );
-		if ( 0 !== strpos( $html, '```' ) ) {
-			return $html;
+		if ( 0 === strpos( $html, "\xEF\xBB\xBF" ) ) {
+			$html = ltrim( substr( $html, 3 ) );
 		}
-		$html = preg_replace( '/^```[a-zA-Z0-9_-]*[ \t]*\R?/', '', $html, 1 );
-		$html = preg_replace( '/\R?```\s*$/', '', (string) $html, 1 );
 
-		return trim( (string) $html );
+		// An opening fence line with nothing but prose before it ("Here is the entry:").
+		if ( preg_match( '/\A[^<`]*?^[ \t]*```[a-zA-Z0-9_-]*[ \t]*(?:\R|\z)/m', $html, $open ) ) {
+			$html = substr( $html, strlen( $open[0] ) );
+			// The closing fence line, and prose (never markup) the model added after it.
+			$html = (string) preg_replace( '/\R?^[ \t]*```[ \t]*(?:\R[^<]*)?\z/m', '', $html, 1 );
+		}
+
+		return self::unwrap_document( trim( $html ) );
+	}
+
+	/**
+	 * Reduce a whole HTML document to the content of its <body>. A model that
+	 * answers with <!DOCTYPE>, <head> and <body> around the entry would
+	 * otherwise send <meta> and <title> into the draft, which Journal
+	 * Foundation rejects on every run.
+	 *
+	 * @param string $html Generated output.
+	 * @return string
+	 */
+	private static function unwrap_document( $html ) {
+		if ( preg_match( '/<body\b[^>]*>(.*?)(?:<\/body\s*>|\z)/is', (string) $html, $body ) ) {
+			return trim( $body[1] );
+		}
+
+		return (string) $html;
 	}
 
 	/**

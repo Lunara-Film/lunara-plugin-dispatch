@@ -184,7 +184,13 @@ class Unreadable_Builder {
 }
 
 class Unreadable_Images {
-    public function assign_images_to_posts() { return array( 'sideloaded' => 0, 'matched' => 0 ); }
+    public $throw = null;
+    public function assign_images_to_posts() {
+        if ( $this->throw ) {
+            throw $this->throw;
+        }
+        return array( 'sideloaded' => 0, 'matched' => 0 );
+    }
 }
 
 class Lunara_Journal_Control_Plane {}
@@ -288,6 +294,15 @@ unreadable_check( $feed_calls === $plugin->feed_fetcher->calls, 'a run with an a
 $plugin->run( false );
 unreadable_check( $feed_calls + 1 === $plugin->feed_fetcher->calls, 'the feeds were not pulled once the pitch was settled' );
 
+// 5b. A Source Radar signal is closed only when its story is set aside, and closed as an editorial skip.
+$plugin->feed_fetcher->items = array();
+Lunara_Journal_Automation::$signals = array( array( 'signal_id' => 77, 'title' => 'Radar story', 'note' => 'A captured page.', 'source_url' => 'https://example.com/radar-77', 'received_at' => '2026-11-11 10:00:00' ) );
+$plugin->run( false );
+unreadable_check( ! isset( Lunara_Journal_Automation::$outcomes[77] ), 'one unreadable answer already closed the Source Radar signal' );
+$plugin->run( false );
+unreadable_check( 'editorial_skip' === ( Lunara_Journal_Automation::$outcomes[77] ?? '' ), 'a set-aside Source Radar signal was not closed as editorial_skip' );
+Lunara_Journal_Automation::$signals = array();
+
 // 6. A run that throws writes a failed report and releases the lock.
 $plugin->feed_fetcher->items = array( unreadable_story( 20 ) );
 $plugin->ai_client->throw    = new RuntimeException( 'The provider client broke <b>badly</b>.' );
@@ -299,8 +314,20 @@ $report = $plugin->get_last_run_report();
 unreadable_check( isset( $report['success'] ) && false === $report['success'] && 'internal_error' === ( $report['ai_error_code'] ?? '' ), 'a run that threw left no failed report' );
 unreadable_check( $thrown['message'] === ( $plugin->get_run_history()[0]['message'] ?? '' ), 'a run that threw is missing from the run history' );
 unreadable_check( ! in_array( 'https://example.com/story-20', $plugin->feed_fetcher->seen, true ), 'a run that threw marked its items seen' );
+unreadable_check( false !== strpos( $thrown['message'], 'wrote no drafts' ), 'an error before the draft step did not say that no draft was written' );
 $plugin->ai_client->throw      = null;
 $plugin->post_builder->readable = true;
+
+// 6b. An error after the drafts were written says so and names the drafts; it never claims that nothing was written.
+$plugin->image_handler->throw = new TypeError( 'image step broke' );
+$late = $plugin->run( false );
+$late_report = $plugin->get_last_run_report();
+unreadable_check( empty( $late['success'] ) && false !== strpos( $late['message'], 'after writing 1 draft(s)' ), 'an error after the draft step did not report the written draft' );
+unreadable_check( false === strpos( $late['message'], 'wrote no drafts' ), 'an error after the draft step claimed that no draft was written' );
+unreadable_check( 1 === ( $late_report['created'] ?? 0 ) && 1 === count( $late['post_ids'] ?? array() ), 'the failed report lost the count of drafts already written' );
+$plugin->image_handler->throw = null;
+
+$plugin->feed_fetcher->items = array( unreadable_story( 21 ) );
 $after_throw = $plugin->run( false );
 unreadable_check( ! empty( $after_throw['success'] ) && 1 === $after_throw['created'], 'the lock was not released after a run that threw' );
 
@@ -309,7 +336,8 @@ $history = $plugin->get_run_history();
 $rows    = Lunara_Dispatch_Admin::summarize_run_history( $history );
 unreadable_check( count( $rows ) === count( $history ) && count( $rows ) > 5, 'the history rows do not match the stored reports' );
 unreadable_check( true === $rows[0]['ok'] && 1 === $rows[0]['created'], 'the newest history row is not the run that wrote a draft' );
-unreadable_check( false === $rows[1]['ok'] && 0 === $rows[1]['created'] && false !== strpos( $rows[1]['message'], 'internal error' ), 'the failed run is not the second history row' );
+unreadable_check( false === $rows[1]['ok'] && 1 === $rows[1]['created'] && false !== strpos( $rows[1]['message'], 'after writing 1 draft(s)' ), 'the run that failed after its draft is not the second history row' );
+unreadable_check( false === $rows[2]['ok'] && 0 === $rows[2]['created'] && false !== strpos( $rows[2]['message'], 'wrote no drafts' ), 'the run that failed before its draft is not the third history row' );
 unreadable_check( 0 === Lunara_Dispatch_Admin::runs_since_last_draft( $history ), 'a history that opens on a written draft did not count zero quiet runs' );
 unreadable_check( 2 === Lunara_Dispatch_Admin::runs_since_last_draft( array(
     array( 'success' => true, 'created' => 0 ),
