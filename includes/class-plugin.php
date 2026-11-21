@@ -587,6 +587,12 @@ class Lunara_Dispatch_Plugin {
         $this->current_pitch_items = array();
         $result = $this->run_once($force);
 
+        // Top up the day's held drafts after the model run. The cadence stops
+        // at three and never publishes; a missing class leaves this run as it was.
+        if (class_exists('Lunara_Dispatch_Cadence')) {
+            Lunara_Dispatch_Cadence::fill_due_slots();
+        }
+
         // Approved pitches beyond this run's cap go straight into the next
         // worker run, now that the lock is released.
         if (!empty($this->current_pitch_items) && !empty($result['success'])
